@@ -1,17 +1,45 @@
-<html>
-    <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="Content-Security-Policy" content="script-src 'self';">
-        <link rel="stylesheet" href="assets/css/index.css">
-    </head>
-    <body>
-        <div id="splash" style="display:none">
-            <img class="splash" src="assets/images/icon/icon.png" />
-            <p class="splash-message"></p>
-            <p class="splash-author"><span class="author"></span></p>
-            <p class="message">Recherche de mise à jour...</p>
-            <progress value="0" max="0" class="progress"></progress>
-        </div>
-        <script src="assets/js/index.js" type="module"></script>
-    </body>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self';">
+    <title>Lebiu Launcher</title>
+    <link rel="stylesheet" href="assets/css/index.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url('./assets/images/background/dark/2.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        #splash {
+            text-align: center;
+            color: white;
+        }
+
+        #splash img.splash {
+            width: 180px;
+            height: 180px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="splash">
+        <img class="splash" src="assets/images/icon.png" />
+        <p class="title">Iniciando Lebiu Launcher</p>
+        <!-- Mensajes dinámicos que usa index.js -->
+        <p class="splash-message"></p>
+        <p class="message"></p>
+        <progress value="0" max="100" class="progress"></progress>
+    </div>
+    <script src="assets/js/index.js" type="module"></script>
+</body>
 </html>

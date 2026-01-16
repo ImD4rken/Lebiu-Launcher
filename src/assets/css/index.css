@@ -1,129 +1,124 @@
 @import "font.css";
 @import 'theme.css';
 
+/* contenedor general */
 body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-image: url('../images/background/dark/2.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     background-color: var(--background);
-    font-family: "Poppins";
-    letter-spacing: 0px;
+    font-family: "Poppins", sans-serif;
+    color: var(--color);
+    overflow: hidden;
 }
 
-img {
-    -webkit-user-drag: none;
-    user-select: none;
+/* caja del splash (centrada y responsiva) */
+#splash {
+    width: 420px;         /* ancho del contenido (ajustable) */
+    max-width: 90%;
+    text-align: center;
+    pointer-events: none; /* evita clicks sobre el splash si no hace nada */
 }
 
+/* logo */
 .splash {
-    position: absolute;
-    top: 180px;
-    left: 50%;
-    transform: translate(-50%);
-    width: 140px;
-    height: 140px;
-    transition: opacity .3s, top 1.5s;
+    display: block;
+    margin: 0 auto 18px;
+    width: 220px;         /* logo más grande */
+    height: auto;
+    transition: opacity .35s ease, transform .35s ease;
     opacity: 0;
+    transform: translateY(-8px);
 }
 
-.splash.opacity {
+/* estado visible */
+#splash.visible .splash {
     opacity: 1;
+    transform: translateY(0);
 }
 
-.splash.translate {
-    top: 129px;
-}
-
+/* mensaje principal */
 .splash-message {
-    position: absolute;
-    top: 289px;
-    left: 0px;
-    width: 400px;
-    font: normal normal bold 19px/29px Poppins;
-    text-align: center;
-    letter-spacing: 0px;
-    transition: opacity 1.5s;
-    color: var(--color);
+    font: bold 22px/28px Poppins;
+    margin: 0 0 8px;
     opacity: 0;
+    transition: opacity .4s ease;
 }
 
-.splash-message.opacity {
-    opacity: 1;
-}
-
+/* autor (pequeño) */
 .splash-author {
-    position: absolute;
-    top: 326px;
-    left: 0px;
-    width: 400px;
-    text-align: center;
-    transition: opacity 1.5s;
-    font: normal normal normal 9px/13px Poppins;
-    color: var(--color);
+    font: normal 11px/14px Poppins;
+    margin: 2px 0 8px;
     opacity: 0;
+    transition: opacity .4s ease;
 }
 
 .splash-author .author {
-    font: normal normal bold 9px/13px Poppins;
+    font-weight: 700;
 }
 
-.splash-author.opacity {
-    opacity: 1;
-}
-
+/* mensaje secundario */
 .message {
-    position: absolute;
-    top: 347px;
-    left: 0px;
-    width: 400px;
-    text-align: center;
-    transition: opacity 1.5s;
-    font: normal normal bold 18px/27px Poppins;
-    color: var(--color);
+    font: bold 18px/26px Poppins;
+    margin: 0 0 14px;
     opacity: 0;
+    transition: opacity .4s ease;
 }
 
-.download-update {
-    position: absolute;
-    left: 25%;
-    margin-top: 20px;
-    width: 200px;
-    font: normal normal bold 22px / 45px Poppins;
-    color: var(--color);
-    border: 2px solid var(--color);
-    border-radius: 15px;
-    transition: background-color .2s, color .2s;
-}
-
-.download-update:hover {
-    background-color: var(--color);
-    color: var(--background);
-    cursor: pointer;
-}
-
-.message.opacity {
+/* al mostrar todo */
+#splash.visible .splash-message,
+#splash.visible .splash-author,
+#splash.visible .message {
     opacity: 1;
 }
 
+/* progress bar */
 .progress {
-    position: absolute;
-    top: 410px;
-    left: 106px;
-    width: 189px;
+    position: relative;
+    width: 100%;
     height: 10px;
     appearance: none;
-    transition: opacity .2s;
+    -webkit-appearance: none;
+    border-radius: 8px;
+    border: 2px solid #ffffff;
+    background-color: rgba(0, 0, 0, 0.3);
     opacity: 0;
+    transition: opacity .3s ease;
+    margin-top: 16px;
+    box-shadow: inset 0 0 8px rgba(84, 84, 84, 0.2);
 }
 
-.show {
+/* mostrar la barra */
+.progress.show {
     opacity: 1;
 }
 
+/* estilos del progress (webkit) */
 .progress::-webkit-progress-bar {
-    background-color: var(--background);
-    border: solid 1px var(--element-color);
-    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    box-shadow: inset 0 0 8px rgba(157, 78, 221, 0.2);
 }
 
 .progress::-webkit-progress-value {
-    background-color: var(--element-color);
-    border-radius: 10px;
+    background: linear-gradient(90deg, #6a6a6a 0%, #b0b0b0 50%, #e8e8e8 100%);
+    border-radius: 6px;
+    transition: width 0.2s ease;
+    box-shadow: 0 0 12px rgba(132, 132, 133, 0.8);
+}
+
+/* estilos para Firefox (fallback) */
+.progress::-moz-progress-bar {
+    background: linear-gradient(90deg, #6a6a6a 0%, #b0b0b0 50%, #e8e8e8 100%);
+    border-radius: 6px;
+    transition: width 0.2s ease;
+    box-shadow: 0 0 12px rgba(122, 122, 122, 0.8);
 }

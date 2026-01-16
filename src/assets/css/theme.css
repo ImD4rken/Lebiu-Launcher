@@ -1,24 +1,29 @@
 .global {
-    --element-color: #00bd7a;
-    --transition: all 0.5s cubic-bezier(1, 0.46, 0, 1.29);
-    --dark-color: #292929;
-    --light-color: rgb(245, 245, 245);
+    --element-color: #ff4fa3;
+    --transition: all 0.3s ease;
+    --dark-color: #1a1d24;
+    --light-color: #1a1d24;
+    --purple: #ff4fa3;
+    --purple-dark: #e14190;
+    --purple-light: #ff7bbd;
+    --white: #ffffff;
+    --accent: #ff4fa3;
 }
 
 .dark {
-    --color: #F5F5F5;
-    --background: #292929;
-    --background-element: #424242;
-    --background-transparent: #2c2c2ccc;
-    --shadow: rgba(25, 25, 25, 0.7);
-    --svg-color: brightness(0) saturate(100%) invert(100%) sepia(55%) saturate(23%) hue-rotate(236deg) brightness(108%) contrast(92%);
+    --color: #f6f7fb;
+    --background: #1f222b;
+    --background-element: #2b303a;
+    --background-transparent: #2b303a;
+    --shadow: #0e1016;
+    --svg-color: brightness(0) saturate(100%) invert(65%) sepia(18%) saturate(1036%) hue-rotate(298deg) brightness(101%) contrast(101%);
 }
 
 .light {
-    --color: #151515;
-    --background: rgb(245, 245, 245);
-    --background-element: #c2c2c2;
-    --background-transparent: rgba(204, 204, 204, 0.8);
-    --shadow: rgba(208, 208, 208, 0.7);
-    --svg-color: brightness(0) saturate(100%) invert(0%) sepia(5%) saturate(1719%) hue-rotate(357deg) brightness(94%) contrast(84%);
+    --color: #f6f7fb;
+    --background: #1f222b;
+    --background-element: #2b303a;
+    --background-transparent: #2b303a;
+    --shadow: #0e1016;
+    --svg-color: brightness(0) saturate(100%) invert(65%) sepia(18%) saturate(1036%) hue-rotate(298deg) brightness(101%) contrast(101%);
 }

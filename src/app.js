@@ -6,15 +6,57 @@
 const { app, ipcMain, nativeTheme } = require('electron');
 const { Microsoft } = require('minecraft-java-core');
 const { autoUpdater } = require('electron-updater')
-
 const path = require('path');
 const fs = require('fs');
-const Store = require('electron-store');
-
-Store.initRenderer();
+const RPC = require('discord-rpc');
 
 const UpdateWindow = require("./assets/js/windows/updateWindow.js");
 const MainWindow = require("./assets/js/windows/mainWindow.js");
+
+const CLIENT_ID = '1461439794151161856';
+RPC.register(CLIENT_ID);
+
+const rpc = new RPC.Client({ transport: 'ipc' });
+
+let currentInstance = 'Sin seleccionar';
+let currentPanel = 'home';
+
+// ... (resto del código anterior)
+
+// Actualizamos setActivity para recibir la imagen
+async function setActivity(instanceName = currentInstance, panelName = currentPanel, avatarURL = null) {
+    if (!rpc) return;
+
+    let details = 'En el menú principal';
+    if (panelName === 'settings') {
+        details = 'Configurando Launcher';
+    } else if (panelName === 'login') {
+        details = 'En el login';
+    }
+
+    // Si hay avatarURL, la usamos como imagen pequeña o grande según prefieras.
+    // Usaremos avatarURL para smallImageKey si existe, de lo contrario el 'icon' por defecto.
+    rpc.setActivity({
+        startTimestamp: new Date(),
+        smallImageKey: 'launcher_logo',
+        largeImageText: 'Lebiu Launcher',
+        largeImageKey: avatarURL ? avatarURL : 'icon', // Aquí se aplica el cambio
+        smallImageText: `Instancia: ${instanceName}`,
+        details: details,
+        state: `Jugando: ${instanceName}`,
+        instance: true,
+    });
+}
+
+// ...
+
+
+rpc.on('ready', () => {
+    console.log('Rich Presence conectado.');
+    setActivity();
+});
+
+rpc.login({ clientId: CLIENT_ID }).catch(console.error);
 
 let dev = process.env.NODE_ENV === 'dev';
 
@@ -73,7 +115,21 @@ ipcMain.handle('is-dark-theme', (_, theme) => {
     return nativeTheme.shouldUseDarkColors;
 })
 
+ipcMain.on('instance-changed', (event, data) => {
+    currentInstance = data.instanceName;
+    // Pasamos el avatarURL que enviaremos desde el renderer
+    setActivity(currentInstance, currentPanel, data.avatarURL);
+    console.log(`Instancia cambió a: ${currentInstance} con avatar: ${data.avatarURL}`);
+})
+ipcMain.on('panel-changed', (event, data) => {
+    currentPanel = data.panelName;
+    setActivity(currentInstance, currentPanel);
+    console.log(`Panel cambió a: ${currentPanel}`);
+})
+
 app.on('window-all-closed', () => app.quit());
+
+ 
 
 autoUpdater.autoDownload = false;
 

@@ -1,350 +1,1370 @@
 /**
- * @author Luuxis
- * Luuxis License v1.0 (voir fichier LICENSE pour les détails en FR/EN)
+
+ * @author Darken
+
+ * @license CC-BY-NC 4.0 - https://creativecommons.org/licenses/by-nc/4.0
+
  */
+
 import { config, database, logger, changePanel, appdata, setStatus, pkg, popup } from '../utils.js'
 
+
+
 const { Launch } = require('minecraft-java-core')
+
 const { shell, ipcRenderer } = require('electron')
 
+
+
 class Home {
+
     static id = "home";
+
+
+
     async init(config) {
+
         this.config = config;
+
         this.db = new database();
-        this.news()
-        this.socialLick()
-        this.instancesSelect()
-        document.querySelector('.settings-btn').addEventListener('click', e => changePanel('settings'))
+
+        this.currentSession = null;
+
+        this.news();
+
+        this.renderSidebarAvatars();
+
+        this.instancesSelect();
+
+        document.querySelector('.settings-btn').addEventListener('click', e => changePanel('settings'));
+
     }
+
+
+
+    async filterAuthorizedInstances(instancesList, authName) {
+
+        let unlockedData = {};
+
+        try {
+
+            unlockedData = await this.db.readData('unlockedInstances') || {};
+
+            console.log('filterAuthorizedInstances: unlockedData from DB =', JSON.stringify(unlockedData));
+
+        } catch (e) {
+
+            console.warn('Error reading unlocked instances from DB:', e);
+
+        }
+
+
+
+        let needsUpdate = false;
+
+        for (let instanceName in unlockedData) {
+
+            const unlockedInfo = unlockedData[instanceName];
+
+            const savedCode = typeof unlockedInfo === 'object' ? unlockedInfo.code : null;
+
+           
+
+            const currentInstance = instancesList.find(i => i.name === instanceName);
+
+            if (currentInstance && currentInstance.password) {
+
+                if (!savedCode || savedCode !== currentInstance.password) {
+
+                    const reason = !savedCode ? 'no code stored' : 'code mismatch';
+
+                    console.log(`🔄 ${reason} for "${instanceName}" - clearing unlock`);
+
+                    delete unlockedData[instanceName];
+
+                    needsUpdate = true;
+
+                }
+
+            } else {
+
+                if (currentInstance && !currentInstance.password) {
+
+                    console.log(`🔄 Password removed from "${instanceName}" - clearing unlock`);
+
+                    delete unlockedData[instanceName];
+
+                    needsUpdate = true;
+
+                }
+
+            }
+
+        }
+
+
+
+        if (needsUpdate) {
+
+            try {
+
+                const dataToSave = { ...unlockedData };
+
+                delete dataToSave.ID;
+
+                await this.db.updateData('unlockedInstances', dataToSave);
+
+                console.log('✅ Cleaned up expired unlocks');
+
+            } catch (e) {
+
+                console.warn('Error updating unlocks:', e);
+
+            }
+
+        }
+
+
+
+        const unlockedInstances = Object.keys(unlockedData).filter(key => {
+
+            const info = unlockedData[key];
+
+            return info === true || (typeof info === 'object' && info !== null);
+
+        });
+
+
+
+        const filtered = instancesList.filter(instance => {
+
+            if (instance.password) {
+
+                const isUnlocked = unlockedInstances.includes(instance.name);
+
+                console.log(`Instance "${instance.name}" has password, unlocked=${isUnlocked}`);
+
+                return isUnlocked;
+
+            }
+
+
+
+            if (instance.whitelistActive) {
+
+                const wl = Array.isArray(instance.whitelist) ? instance.whitelist : [];
+
+                const unlockInfo = unlockedData[instance.name];
+
+                const unlockedUsers = (unlockInfo && Array.isArray(unlockInfo.users)) ? unlockInfo.users : [];
+
+               
+
+                const isAuthorized = wl.includes(authName) || unlockedUsers.includes(authName);
+
+                console.log(`Instance "${instance.name}" has whitelist=[${wl.join(', ')}], unlockedUsers=[${unlockedUsers.join(', ')}], authName=${authName}, authorized=${isAuthorized}`);
+
+                return isAuthorized;
+
+            }
+
+
+
+            return true;
+
+        });
+
+       
+
+        console.log('filterAuthorizedInstances: total instances in =', instancesList.length, 'filtered out =', filtered.length);
+
+        return filtered;
+
+    }
+
+
+
+    setBackground(url) {
+
+        try {
+
+            if (!url) {
+
+                document.body.style.backgroundImage = '';
+
+                this.currentBackground = null;
+
+                return;
+
+            }
+
+
+
+            const img = new Image();
+
+            img.onload = () => {
+
+                document.body.style.backgroundImage = `url('${url}')`;
+
+                this.currentBackground = url;
+
+            };
+
+            img.onerror = () => {
+
+                console.warn('No se pudo cargar la imagen de fondo:', url);
+
+                document.body.style.backgroundImage = '';
+
+                this.currentBackground = null;
+
+            };
+
+            img.src = url;
+
+        } catch (e) {
+
+            console.warn('Error estableciendo fondo:', e);
+
+            document.body.style.backgroundImage = '';
+
+        }
+
+    }
+
+
+
+    formatPlaytime(durationMs) {
+
+        if (!durationMs || durationMs < 0) return '0m';
+
+        const totalSeconds = Math.floor(durationMs / 1000);
+
+        const hours = Math.floor(totalSeconds / 3600);
+
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+        const seconds = totalSeconds % 60;
+
+        const parts = [];
+
+        if (hours) parts.push(`${hours}h`);
+
+        if (minutes) parts.push(`${minutes}m`);
+
+        if (!hours && !minutes) parts.push(`${seconds}s`);
+
+        return parts.join(' ');
+
+    }
+
+
+
+    async updateInstanceDisplay(instanceName) {
+
+        const titleEl = document.querySelector('.instance-title');
+
+        const lastSessionEl = document.querySelector('.last-session-value');
+
+        const playtimeEl = document.querySelector('.playtime-value');
+
+        if (!titleEl || !lastSessionEl || !playtimeEl) return;
+
+        titleEl.textContent = instanceName || '';
+
+        lastSessionEl.textContent = '—';
+
+        playtimeEl.textContent = '—';
+
+        if (!instanceName) return;
+
+        try {
+
+            const stats = await this.db.readData('instanceStats');
+
+            const entry = stats?.instances?.[instanceName];
+
+            if (entry?.lastSession) lastSessionEl.textContent = new Date(entry.lastSession).toLocaleString();
+
+            if (entry?.playtimeMs) playtimeEl.textContent = this.formatPlaytime(entry.playtimeMs);
+
+        } catch (err) {
+
+            console.warn('No se pudieron cargar las estadísticas de la instancia:', err);
+
+        }
+
+    }
+
+
+
+    async persistSession(instanceName, startedAt) {
+
+        if (!instanceName || !startedAt) return;
+
+        const duration = Math.max(0, Date.now() - startedAt);
+
+        let stats = await this.db.readData('instanceStats');
+
+        if (!stats) {
+
+            try {
+
+                stats = await this.db.createData('instanceStats', { instances: {} });
+
+            } catch (err) {
+
+                console.warn('No se pudo crear el registro de estadísticas:', err);
+
+                return;
+
+            }
+
+        }
+
+        const existingInstances = stats.instances || {};
+
+        const current = existingInstances[instanceName] || {};
+
+        const playtimeMs = (current.playtimeMs || 0) + duration;
+
+        const updated = {
+
+            ...stats,
+
+            instances: {
+
+                ...existingInstances,
+
+                [instanceName]: {
+
+                    ...current,
+
+                    playtimeMs,
+
+                    lastSession: Date.now()
+
+                }
+
+            }
+
+        };
+
+        try {
+
+            await this.db.updateData('instanceStats', updated, stats.ID || 1);
+
+            await this.updateInstanceDisplay(instanceName);
+
+        } catch (err) {
+
+            console.warn('No se pudieron guardar las estadísticas de la instancia:', err);
+
+        }
+
+    }
+
+
 
     async news() {
+
         let newsElement = document.querySelector('.news-list');
-        let news = await config.getNews(this.config).then(res => res).catch(err => false);
-        if (news) {
-            if (!news.length) {
-                let blockNews = document.createElement('div');
-                const date = this.getdate(new Date())
-                blockNews.classList.add('news-block');
-                blockNews.innerHTML = `
-                    <div class="news-header">
-                        <img class="server-status-icon" src="assets/images/icon/icon.png">
-                        <div class="header-text">
-                            <div class="title">Aucun news n'ai actuellement disponible.</div>
-                        </div>
-                        <div class="date">
-                            <div class="day">${date.day}</div>
-                            <div class="month">${date.month}</div>
-                        </div>
-                    </div>
-                    <div class="news-content">
-                        <div class="bbWrapper">
-                            <p>Vous pourrez suivre ici toutes les news relative au serveur.</p>
-                        </div>
-                    </div>`
-                newsElement.appendChild(blockNews);
-            } else {
-                for (let News of news) {
-                    let date = this.getdate(News.publish_date)
-                    let blockNews = document.createElement('div');
-                    blockNews.classList.add('news-block');
-                    blockNews.innerHTML = `
-                        <div class="news-header">
-                            <img class="server-status-icon" src="assets/images/icon/icon.png">
-                            <div class="header-text">
-                                <div class="title">${News.title}</div>
-                            </div>
-                            <div class="date">
-                                <div class="day">${date.day}</div>
-                                <div class="month">${date.month}</div>
-                            </div>
-                        </div>
-                        <div class="news-content">
-                            <div class="bbWrapper">
-                                <p>${News.content.replace(/\n/g, '</br>')}</p>
-                                <p class="news-author">Auteur - <span>${News.author}</span></p>
-                            </div>
-                        </div>`
-                    newsElement.appendChild(blockNews);
-                }
-            }
-        } else {
-            let blockNews = document.createElement('div');
-            const date = this.getdate(new Date())
-            blockNews.classList.add('news-block');
-            blockNews.innerHTML = `
-                <div class="news-header">
-                        <img class="server-status-icon" src="assets/images/icon/icon.png">
-                        <div class="header-text">
-                            <div class="title">Error.</div>
-                        </div>
-                        <div class="date">
-                            <div class="day">${date.day}</div>
-                            <div class="month">${date.month}</div>
-                        </div>
-                    </div>
-                    <div class="news-content">
-                        <div class="bbWrapper">
-                            <p>Impossible de contacter le serveur des news.</br>Merci de vérifier votre configuration.</p>
-                        </div>
-                    </div>`
-            newsElement.appendChild(blockNews);
+
+        if (!newsElement) {
+
+            console.warn('news-list element not found in DOM');
+
+            return;
+
         }
+
+       
+
+        let news = await config.getNews().then(res => res).catch(err => false);
+
+
+
+        if (news) {
+
+            if (!news.length) {
+
+                let blockNews = document.createElement('div');
+
+                blockNews.classList.add('news-block');
+
+                blockNews.innerHTML = `
+
+                    <div class="news-header">
+
+                        <img class="server-status-icon" src="assets/images/icon.png">
+
+                        <div class="header-text">
+
+                            <div class="title">No hay noticias disponibles actualmente.</div>
+
+                        </div>
+
+                        <div class="date">
+
+                            <div class="day">25</div>
+
+                            <div class="month">Abril</div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="news-content">
+
+                        <div class="bbWrapper">
+
+                            <p>Puedes seguir todas las novedades relativas al servidor aquí.</p>
+
+                        </div>
+
+                    </div>`;
+
+                newsElement.appendChild(blockNews);
+
+            } else {
+
+                for (let News of news) {
+
+                    let date = this.getdate(News.publish_date);
+
+                    let blockNews = document.createElement('div');
+
+                    blockNews.classList.add('news-block');
+
+                    blockNews.innerHTML = `
+
+                        <div class="news-header">
+
+                            <img class="server-status-icon" src="assets/images/icon.png">
+
+                            <div class="header-text">
+
+                                <div class="title">${News.title}</div>
+
+                            </div>
+
+                            <div class="date">
+
+                                <div class="day">${date.day}</div>
+
+                                <div class="month">${date.month}</div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="news-content">
+
+                            <div class="bbWrapper">
+
+                                <p>${News.content.replace(/\n/g, '<br>')}</p>
+
+                                <p class="news-author">- <span>${News.author}</span></p>
+
+                            </div>
+
+                        </div>`;
+
+                    newsElement.appendChild(blockNews);
+
+                }
+
+            }
+
+        } else {
+
+            let blockNews = document.createElement('div');
+
+            blockNews.classList.add('news-block');
+
+            blockNews.innerHTML = `
+
+                <div class="news-header">
+
+                        <img class="server-status-icon" src="assets/images/icon.png">
+
+                        <div class="header-text">
+
+                            <div class="title">Error.</div>
+
+                        </div>
+
+                        <div class="date">
+
+                            <div class="day">25</div>
+
+                            <div class="month">Abril</div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="news-content">
+
+                        <div class="bbWrapper">
+
+                            <p>No se puede contactar con el servidor de noticias.</br>Por favor verifique su configuración.</p>
+
+                        </div>
+
+                    </div>`
+
+            newsElement.appendChild(blockNews);
+
+        }
+
     }
 
+
+
     socialLick() {
-        let socials = document.querySelectorAll('.social-block')
+
+        let socials = document.querySelectorAll('.social-block');
 
         socials.forEach(social => {
-            social.addEventListener('click', e => {
-                shell.openExternal(e.target.dataset.url)
-            })
+
+            social.addEventListener('click', e => shell.openExternal(social.dataset.url));
+
+        });
+
+    }
+
+
+
+    async renderSidebarAvatars() {
+
+        try {
+
+            let configClient = await this.db.readData('configClient');
+
+            let auth = await this.db.readData('accounts', configClient.account_selected);
+
+            let allInstances = await config.getInstanceList();
+
+            let instancesList = await this.filterAuthorizedInstances(allInstances, auth?.name);
+
+            const container = document.querySelector('.instance-avatars');
+
+            if (!container) return;
+
+
+
+            console.debug('renderSidebarAvatars: auth=', auth?.name, 'authorized instances=', instancesList.map(i => i.name));
+
+
+
+            container.innerHTML = '';
+
+
+
+            let tooltip = document.querySelector('.instance-tooltip');
+
+            if (!tooltip) {
+
+                tooltip = document.createElement('div');
+
+                tooltip.className = 'instance-tooltip';
+
+                tooltip.style.display = 'none';
+
+                document.body.appendChild(tooltip);
+
+            }
+
+
+
+            const defaultAvatar = 'assets/images/icon.png';
+
+            for (let instance of instancesList) {
+
+
+
+                const bg = instance.backgroundUrl || instance.background || null;
+
+                const avatar = instance.avatarUrl || instance.iconUrl || instance.icon || '';
+
+                const el = document.createElement('div');
+
+                el.className = 'instance-avatar';
+
+                el.dataset.name = instance.name;
+
+
+
+                if (avatar) el.style.backgroundImage = `url('${avatar}')`;
+
+                else if (bg) el.style.backgroundImage = `url('${bg}')`;
+
+                else el.style.backgroundImage = `url('${defaultAvatar}')`;
+
+
+
+                if (configClient.instance_selct === instance.name) el.classList.add('active');
+
+
+
+                el.addEventListener('mouseenter', (ev) => {
+
+                    try {
+
+                        let tooltipText = instance.name;
+
+                        tooltip.textContent = tooltipText;
+
+                        tooltip.style.display = 'block';
+
+                        const rect = el.getBoundingClientRect();
+
+                        tooltip.style.top = `${rect.top + rect.height / 2}px`;
+
+                        tooltip.style.left = `${rect.right + 10}px`;
+
+                    } catch (err) { }
+
+                });
+
+                el.addEventListener('mousemove', (ev) => {
+
+                    tooltip.style.top = `${ev.clientY + 12}px`;
+
+                    tooltip.style.left = `${ev.clientX + 12}px`;
+
+                });
+
+                el.addEventListener('mouseleave', () => {
+
+                    tooltip.style.display = 'none';
+
+                });
+
+
+
+                el.addEventListener('click', async () => {
+    try {
+        const prev = container.querySelector('.instance-avatar.active');
+        if (prev) prev.classList.remove('active');
+        el.classList.add('active');
+
+        configClient.instance_selct = instance.name;
+        await this.db.updateData('configClient', configClient);
+
+        // Determinamos el avatar con prioridad
+        const avatarToDiscord = instance.avatarUrl || instance.iconUrl || instance.icon || 'assets/images/icon.png';
+
+        // Enviamos la actualización completa
+        ipcRenderer.send('instance-changed', { 
+            instanceName: instance.name,
+            avatarURL: avatarToDiscord 
+        });
+
+        if (bg) {
+            this.setBackground(bg);
+        } else {
+            this.setBackground(null);
+        }
+        
+        try { setStatus(instance.status); } catch (e) { }
+        await this.updateInstanceDisplay(instance.name);
+    } catch (err) { console.warn('Error al seleccionar instancia desde sidebar:', err); }
+});
+
+
+
+                container.appendChild(el);
+
+            }
+
+        } catch (e) {
+
+            console.warn('Error renderizando avatars de instancia:', e);
+
+        }
+
+    }
+
+
+
+    async instancesSelect() {
+
+        let configClient = await this.db.readData('configClient');
+
+        let auth = await this.db.readData('accounts', configClient.account_selected);
+
+        let allInstances = await config.getInstanceList();
+
+        let instancesList = await this.filterAuthorizedInstances(allInstances, auth?.name);
+
+       
+
+        let instanceSelect = instancesList.find(i => i.name == configClient?.instance_selct)
+
+            ? configClient?.instance_selct
+
+            : null;
+
+
+
+        let playBTN = document.querySelector('.play-btn');
+
+        let instanceBTN = document.querySelector('.instance-select');
+
+        let instancePopup = document.querySelector('.instance-popup');
+
+        let instanceCloseBTN = document.querySelector('.close-popup');
+
+        const notificationInstance = new popup();
+
+
+
+        instanceBTN.style.display = 'flex';
+
+
+
+        if (!instanceSelect && instancesList.length > 0) {
+
+            configClient.instance_selct = instancesList[0]?.name;
+
+            instanceSelect = instancesList[0]?.name;
+
+            await this.db.updateData('configClient', configClient);
+
+        }
+
+
+
+        for (let instance of instancesList) {
+
+            if (instance.name === instanceSelect) {
+
+                setStatus(instance.status);
+
+                break;
+
+            }
+
+        }
+
+
+
+        if (instanceSelect) await this.updateInstanceDisplay(instanceSelect);
+
+const currentInstanceData = instancesList.find(i => i.name === instanceSelect);
+    if (currentInstanceData) {
+        const initialAvatar = currentInstanceData.avatarUrl || currentInstanceData.iconUrl || currentInstanceData.icon || 'assets/images/icon.png';
+        ipcRenderer.send('instance-changed', { 
+            instanceName: instanceSelect,
+            avatarURL: initialAvatar
         });
     }
 
-    async instancesSelect() {
-        let configClient = await this.db.readData('configClient')
-        let auth = await this.db.readData('accounts', configClient.account_selected)
-        let instancesList = await config.getInstanceList()
-        let instanceSelect = instancesList.find(i => i.name == configClient?.instance_select) ? configClient?.instance_select : null
+        try {
 
-        let instanceBTN = document.querySelector('.play-instance')
-        let instancePopup = document.querySelector('.instance-popup')
-        let instancesListPopup = document.querySelector('.instances-List')
-        let instanceCloseBTN = document.querySelector('.close-popup')
+            let currentOption = instancesList.find(i => i.name === instanceSelect);
 
-        if (instancesList.length === 1) {
-            document.querySelector('.instance-select').style.display = 'none'
-            instanceBTN.style.paddingRight = '0'
-        }
+            if (currentOption) this.setBackground(currentOption.backgroundUrl || currentOption.background || null);
 
-        if (!instanceSelect) {
-            let newInstanceSelect = instancesList.find(i => i.whitelistActive == false)
-            let configClient = await this.db.readData('configClient')
-            configClient.instance_select = newInstanceSelect.name
-            instanceSelect = newInstanceSelect.name
-            await this.db.updateData('configClient', configClient)
-        }
+        } catch (e) { console.warn('Error aplicando fondo inicial:', e); }
 
-        for (let instance of instancesList) {
-            if (instance.whitelistActive) {
-                let whitelist = instance.whitelist.find(whitelist => whitelist == auth?.name)
-                if (whitelist !== auth?.name) {
-                    if (instance.name == instanceSelect) {
-                        let newInstanceSelect = instancesList.find(i => i.whitelistActive == false)
-                        let configClient = await this.db.readData('configClient')
-                        configClient.instance_select = newInstanceSelect.name
-                        instanceSelect = newInstanceSelect.name
-                        setStatus(newInstanceSelect.status)
-                        await this.db.updateData('configClient', configClient)
-                    }
+
+
+        instanceBTN.addEventListener('click', async () => {
+
+            instancePopup.style.display = 'flex';
+
+            const codeInput = document.querySelector('.code-unlock-input');
+
+            if (codeInput) codeInput.focus();
+
+        });
+
+
+        
+        instanceCloseBTN.addEventListener('click', () => instancePopup.style.display = 'none');
+
+
+
+        // Code unlock functionality
+
+        const codeInput = document.querySelector(".code-unlock-input");
+
+        const unlockButton = document.querySelector(".code-unlock-button");
+
+        const cancelButton = document.querySelector('.code-cancel-button');
+
+
+
+        if (cancelButton) cancelButton.addEventListener('click', () => instancePopup.style.display = 'none');
+
+
+
+        if (codeInput && unlockButton) {
+
+            codeInput.addEventListener("keypress", (event) => {
+
+                if (event.key === "Enter") {
+
+                    unlockButton.click();
+
                 }
-            } else console.log(`Initializing instance ${instance.name}...`)
-            if (instance.name == instanceSelect) setStatus(instance.status)
-        }
 
-        instancePopup.addEventListener('click', async e => {
-            let configClient = await this.db.readData('configClient')
+            });
 
-            if (e.target.classList.contains('instance-elements')) {
-                let newInstanceSelect = e.target.id
-                let activeInstanceSelect = document.querySelector('.active-instance')
 
-                if (activeInstanceSelect) activeInstanceSelect.classList.toggle('active-instance');
-                e.target.classList.add('active-instance');
 
-                configClient.instance_select = newInstanceSelect
-                await this.db.updateData('configClient', configClient)
-                instanceSelect = instancesList.filter(i => i.name == newInstanceSelect)
-                instancePopup.style.display = 'none'
-                let instance = await config.getInstanceList()
-                let options = instance.find(i => i.name == configClient.instance_select)
-                await setStatus(options.status)
-            }
-        })
+            unlockButton.addEventListener("click", async () => {
 
-        instanceBTN.addEventListener('click', async e => {
-            let configClient = await this.db.readData('configClient')
-            let instanceSelect = configClient.instance_select
-            let auth = await this.db.readData('accounts', configClient.account_selected)
+                let codigo = codeInput.value.trim();
 
-            if (e.target.classList.contains('instance-select')) {
-                instancesListPopup.innerHTML = ''
-                for (let instance of instancesList) {
-                    if (instance.whitelistActive) {
-                        instance.whitelist.map(whitelist => {
-                            if (whitelist == auth?.name) {
-                                if (instance.name == instanceSelect) {
-                                    instancesListPopup.innerHTML += `<div id="${instance.name}" class="instance-elements active-instance">${instance.name}</div>`
-                                } else {
-                                    instancesListPopup.innerHTML += `<div id="${instance.name}" class="instance-elements">${instance.name}</div>`
+                if (!codigo) {
+
+                    notificationInstance.openNotification({
+
+                        title: 'Código Requerido',
+
+                        content: 'Por favor ingresa un código de instancia',
+
+                        color: '#e21212'
+
+                    });
+
+                    return;
+
+                }
+
+               
+
+                codeInput.value = "";
+
+         
+
+                let configClient = await this.db.readData("configClient");
+
+
+
+                if (!configClient.account_selected) {
+
+                    const allAccounts = await this.db.readAllData("accounts");
+
+                    if (allAccounts.length > 0) {
+
+                        configClient.account_selected = allAccounts[0].ID;
+
+                        await this.db.updateData("configClient", configClient);
+
+                    }
+
+                }
+
+               
+
+                let cuenta = await this.db.readData("accounts", configClient.account_selected);
+
+                console.log("Cuenta cargada:", cuenta);
+
+               
+
+                let usuario = (cuenta && cuenta.name) || "Invitado";
+
+                console.log("Usuario detectado:", usuario);
+
+             
+
+                try {
+
+                    const response = await fetch(`http://51.222.47.158:10023/BridgeClient/api/validate.php`, {
+
+                        method: "POST",
+
+                        headers: {
+
+                            "Content-Type": "application/json",
+
+                        },
+
+                        body: JSON.stringify({
+
+                            codigo: codigo,
+
+                            usuario: usuario,
+
+                        }),
+
+                    });
+
+
+
+                    const data = await response.json();
+
+                    console.info("Respuesta del servidor:", data);
+
+         
+
+                    if (data.status === "success") {
+
+                        console.info("✅ Acceso concedido a la instancia");
+
+                       
+
+                        try {
+
+                            // Obtener la instancia desde el servidor si está disponible
+
+                            const instanceName = data.instanceName || data.instance;
+
+                           
+
+                            if (instanceName) {
+
+                                // Guardar el usuario en la BD bajo la instancia
+
+                                let unlockedData = await this.db.readData('unlockedInstances') || {};
+
+                               
+
+                                if (!unlockedData[instanceName]) {
+
+                                    unlockedData[instanceName] = { users: [] };
+
                                 }
+
+                               
+
+                                if (!Array.isArray(unlockedData[instanceName].users)) {
+
+                                    unlockedData[instanceName].users = [];
+
+                                }
+
+                               
+
+                                if (!unlockedData[instanceName].users.includes(usuario)) {
+
+                                    unlockedData[instanceName].users.push(usuario);
+
+                                }
+
+                               
+
+                                const dataToSave = { ...unlockedData };
+
+                                delete dataToSave.ID;
+
+                                await this.db.updateData('unlockedInstances', dataToSave);
+
+                               
+
+                                console.log(`👤 Usuario ${usuario} agregado a instancia ${instanceName} en BD`);
+
                             }
-                        })
-                    } else {
-                        if (instance.name == instanceSelect) {
-                            instancesListPopup.innerHTML += `<div id="${instance.name}" class="instance-elements active-instance">${instance.name}</div>`
-                        } else {
-                            instancesListPopup.innerHTML += `<div id="${instance.name}" class="instance-elements">${instance.name}</div>`
+
+                           
+
+                            notificationInstance.openNotification({
+
+                                title: 'Éxito',
+
+                                content: '¡Código canjeado exitosamente! Instancia desbloqueada.',
+
+                                color: '#4CAF50'
+
+                            });
+
+                           
+
+                            setTimeout(async () => {
+
+                                await updateInstanceSelection();
+
+                            }, 500);
+
+                        } catch (e) {
+
+                            console.error("Error procesando acceso:", e);
+
+                            notificationInstance.openNotification({
+
+                                title: 'Error',
+
+                                content: 'Error procesando el acceso.',
+
+                                color: '#e21212'
+
+                            });
+
                         }
+
+                    } else if (data.status === "error" && data.message === "Ya tienes acceso a esta instancia") {
+
+                        console.info("⚠️ El usuario ya tiene acceso a esta instancia.");
+
+                        notificationInstance.openNotification({
+
+                            title: 'Acceso Duplicado',
+
+                            content: 'Ya tienes acceso a esta instancia.',
+
+                            color: '#FFC107'
+
+                        });
+
+                        setTimeout(() => {
+
+                            updateInstanceSelection();
+
+                        }, 100);
+
+                    } else {
+
+                        console.error("❌ Instancia no encontrada o código inválido.");
+
+                        notificationInstance.openNotification({
+
+                            title: 'Código Inválido',
+
+                            content: 'Código inválido o instancia no encontrada.',
+
+                            color: '#e21212'
+
+                        });
+
                     }
+
+                } catch (error) {
+
+                    console.error("❌ Error en la petición:", error);
+
+                    notificationInstance.openNotification({
+
+                        title: 'Error de Conexión',
+
+                        content: 'Error al conectar con el servidor.',
+
+                        color: '#e21212'
+
+                    });
+
                 }
 
-                instancePopup.style.display = 'flex'
-            }
+            });
 
-            if (!e.target.classList.contains('instance-select')) this.startGame()
-        })
+        } else {
 
-        instanceCloseBTN.addEventListener('click', () => instancePopup.style.display = 'none')
+            console.warn('Code unlock elements not found in DOM');
+
+        }
+
+
+
+        playBTN.addEventListener('click', () => this.startGame());
+
     }
 
+
+
     async startGame() {
-        let launch = new Launch()
-        let configClient = await this.db.readData('configClient')
-        let instance = await config.getInstanceList()
-        let authenticator = await this.db.readData('accounts', configClient.account_selected)
-        let options = instance.find(i => i.name == configClient.instance_select)
 
-        let playInstanceBTN = document.querySelector('.play-instance')
-        let infoStartingBOX = document.querySelector('.info-starting-game')
-        let infoStarting = document.querySelector(".info-starting-game-text")
-        let progressBar = document.querySelector('.progress-bar')
+        const rawConfig = await this.db.readData('configClient');
 
-        let opt = {
+        let configClient = rawConfig || {};
+
+        let needPersist = false;
+
+
+
+        if (!rawConfig || typeof rawConfig !== 'object') {
+
+            needPersist = true;
+
+            configClient = {
+
+                account_selected: null,
+
+                instance_selct: null,
+
+                java_config: { java_path: null, java_memory: { min: 2, max: 4 } },
+
+                game_config: { screen_size: { width: 854, height: 480 } },
+
+                launcher_config: { download_multi: 5, theme: 'auto', closeLauncher: 'close-launcher', intelEnabledMac: true }
+
+            };
+
+        }
+
+
+
+        if (!configClient.launcher_config) { configClient.launcher_config = { download_multi: 5, theme: 'auto', closeLauncher: 'close-launcher', intelEnabledMac: true }; needPersist = true; }
+
+        if (!configClient.java_config) { configClient.java_config = { java_path: null, java_memory: { min: 2, max: 4 } }; needPersist = true; }
+
+        if (!configClient.java_config.java_memory) { configClient.java_config.java_memory = { min: 2, max: 4 }; needPersist = true; }
+
+        if (!configClient.game_config) { configClient.game_config = { screen_size: { width: 854, height: 480 } }; needPersist = true; }
+
+        if (!configClient.game_config.screen_size) { configClient.game_config.screen_size = { width: 854, height: 480 }; needPersist = true; }
+
+        if (needPersist) {
+
+            try { await this.db.updateData('configClient', configClient); } catch (err) { console.warn('Failed to persist default configClient:', err); }
+
+        }
+
+        const instances = await config.getInstanceList();
+
+        const authenticator = await this.db.readData('accounts', configClient.account_selected);
+
+        const options = instances.find(i => i.name === configClient.instance_selct);
+
+
+
+        const playInstanceBTN = document.querySelector('.play-instance');
+
+        const infoStartingBOX = document.querySelector('.info-starting-game');
+
+        const infoStarting = document.querySelector(".info-starting-game-text");
+
+        const progressBar = document.querySelector('.progress-bar');
+
+
+
+        if (!options) {
+
+            console.error('startGame: no options found for selected instance', configClient.instance_selct);
+
+            new popup().openPopup({ title: 'Error', content: 'No se encontró la instancia seleccionada. Revise la configuración.', color: 'red', options: true });
+
+            return;
+
+        }
+
+
+
+        if (!authenticator) {
+
+            console.error('startGame: no authenticator/account selected');
+
+            new popup().openPopup({ title: 'Error', content: 'No hay una cuenta seleccionada. Inicie sesión primero.', color: 'red', options: true });
+
+            return;
+
+        }
+
+
+
+        if (options.whitelistActive) {
+
+            const wl = Array.isArray(options.whitelist) ? options.whitelist : [];
+
+            if (!wl.includes(authenticator?.name)) {
+
+                console.error('startGame: Usuario no autorizado para lanzar instancia', configClient.instance_selct, 'usuario:', authenticator?.name);
+
+                new popup().openPopup({ title: 'Acceso denegado', content: `No tienes permiso para lanzar la instancia ${options.name}.`, color: 'red', options: true });
+
+                return;
+
+            }
+
+        }
+
+
+
+        if (!options.loadder || typeof options.loadder !== 'object') {
+
+            console.warn('startGame: instance loader info missing or invalid, attempting to continue with defaults', options.name);
+
+        }
+
+
+
+        const opt = {
+
             url: options.url,
-            authenticator: authenticator,
+
+            authenticator,
+
             timeout: 10000,
-            path: `${await appdata()}/${process.platform == 'darwin' ? this.config.dataDirectory : `.${this.config.dataDirectory}`}`,
+
+            path: `${await appdata()}/${process.platform === 'darwin' ? this.config.dataDirectory : `.${this.config.dataDirectory}`}`,
+
             instance: options.name,
-            version: options.loader.minecraft_version,
-            detached: configClient.launcher_config.closeLauncher == "close-all" ? false : true,
+
+            version: options.loadder?.minecraft_version,
+
+            detached: configClient.launcher_config.closeLauncher !== "close-all",
+
             downloadFileMultiple: configClient.launcher_config.download_multi,
+
             intelEnabledMac: configClient.launcher_config.intelEnabledMac,
 
             loader: {
-                type: options.loader.loader_type,
-                build: options.loader.loader_version,
-                enable: options.loader.loader_type == 'none' ? false : true
+
+                type: options.loadder?.loadder_type,
+
+                build: options.loadder?.loadder_version,
+
+                enable: options.loadder?.loadder_type !== 'none'
+
             },
 
             verify: options.verify,
 
-            ignored: [...options.ignored],
+            ignored: Array.isArray(options.ignored) ? [...options.ignored] : [],
 
-            java: {
-                path: configClient.java_config.java_path,
-            },
-
-            JVM_ARGS:  options.jvm_args ? options.jvm_args : [],
-            GAME_ARGS: options.game_args ? options.game_args : [],
+            javaPath: configClient.java_config?.java_path,
 
             screen: {
-                width: configClient.game_config.screen_size.width,
-                height: configClient.game_config.screen_size.height
+
+                width: configClient.game_config?.screen_size?.width,
+
+                height: configClient.game_config?.screen_size?.height
+
             },
 
             memory: {
+
                 min: `${configClient.java_config.java_memory.min * 1024}M`,
+
                 max: `${configClient.java_config.java_memory.max * 1024}M`
+
             }
-        }
 
-        launch.Launch(opt);
+        };
 
-        playInstanceBTN.style.display = "none"
-        infoStartingBOX.style.display = "block"
-        progressBar.style.display = "";
-        ipcRenderer.send('main-window-progress-load')
 
-        launch.on('extract', extract => {
-            ipcRenderer.send('main-window-progress-load')
-            console.log(extract);
-        });
+
+        this.currentSession = { instance: options.name, start: Date.now() };
+
+
+
+        const launch = new Launch();
+
+
+
+        launch.on('extract', () => ipcRenderer.send('main-window-progress-load'));
 
         launch.on('progress', (progress, size) => {
-            infoStarting.innerHTML = `Téléchargement ${((progress / size) * 100).toFixed(0)}%`
-            ipcRenderer.send('main-window-progress', { progress, size })
-            progressBar.value = progress;
-            progressBar.max = size;
+
+            infoStarting.innerHTML = `Descargando ${((progress / size) * 100).toFixed(0)}%`;
+
+            ipcRenderer.send('main-window-progress', { progress, size });
+
+            if (progressBar) {
+
+                progressBar.value = progress;
+
+                progressBar.max = size;
+
+            }
+
         });
 
         launch.on('check', (progress, size) => {
-            infoStarting.innerHTML = `Vérification ${((progress / size) * 100).toFixed(0)}%`
-            ipcRenderer.send('main-window-progress', { progress, size })
-            progressBar.value = progress;
-            progressBar.max = size;
+
+            infoStarting.innerHTML = `Verificando ${((progress / size) * 100).toFixed(0)}%`;
+
+            ipcRenderer.send('main-window-progress', { progress, size });
+
+            if (progressBar) {
+
+                progressBar.value = progress;
+
+                progressBar.max = size;
+
+            }
+
         });
 
-        launch.on('estimated', (time) => {
-            let hours = Math.floor(time / 3600);
-            let minutes = Math.floor((time - hours * 3600) / 60);
-            let seconds = Math.floor(time - hours * 3600 - minutes * 60);
-            console.log(`${hours}h ${minutes}m ${seconds}s`);
-        })
+        launch.on('estimated', time => console.log(`Tiempo estimado: ${time}s`));
 
-        launch.on('speed', (speed) => {
-            console.log(`${(speed / 1067008).toFixed(2)} Mb/s`)
-        })
+        launch.on('speed', speed => console.log(`${(speed / 1067008).toFixed(2)} Mb/s`));
 
-        launch.on('patch', patch => {
-            console.log(patch);
-            ipcRenderer.send('main-window-progress-load')
-            infoStarting.innerHTML = `Patch en cours...`
-        });
+        launch.on('patch', () => { if (infoStarting) infoStarting.innerHTML = `Parche en curso...`; });
 
-        launch.on('data', (e) => {
-            progressBar.style.display = "none"
-            if (configClient.launcher_config.closeLauncher == 'close-launcher') {
-                ipcRenderer.send("main-window-hide")
-            };
+        launch.on('data', () => {
+
+            if (progressBar) progressBar.style.display = "none";
+
+            if (infoStarting) infoStarting.innerHTML = `Jugando...`;
+
             new logger('Minecraft', '#36b030');
-            ipcRenderer.send('main-window-progress-load')
-            infoStarting.innerHTML = `Demarrage en cours...`
-            console.log(e);
-        })
 
-        launch.on('close', code => {
-            if (configClient.launcher_config.closeLauncher == 'close-launcher') {
-                ipcRenderer.send("main-window-show")
-            };
-            ipcRenderer.send('main-window-progress-reset')
-            infoStartingBOX.style.display = "none"
-            playInstanceBTN.style.display = "flex"
-            infoStarting.innerHTML = `Vérification`
-            new logger(pkg.name, '#7289da');
-            console.log('Close');
         });
 
-        launch.on('error', err => {
-            let popupError = new popup()
+        launch.on('close', async code => {
 
-            popupError.openPopup({
-                title: 'Erreur',
-                content: err.error,
-                color: 'red',
-                options: true
-            })
+            ipcRenderer.send('main-window-progress-reset');
 
-            if (configClient.launcher_config.closeLauncher == 'close-launcher') {
-                ipcRenderer.send("main-window-show")
-            };
-            ipcRenderer.send('main-window-progress-reset')
-            infoStartingBOX.style.display = "none"
-            playInstanceBTN.style.display = "flex"
-            infoStarting.innerHTML = `Vérification`
+            if (infoStartingBOX) infoStartingBOX.style.display = "none";
+
+            if (playInstanceBTN) playInstanceBTN.style.display = "flex";
+
+            if (infoStarting) infoStarting.innerHTML = `Verificando`;
+
+            await this.persistSession(options.name, this.currentSession?.start);
+
+            this.currentSession = null;
+
             new logger(pkg.name, '#7289da');
-            console.log(err);
+
         });
+
+        launch.on('error', async err => {
+
+            let popupError = new popup();
+
+            popupError.openPopup({ title: 'Error', content: err?.error || err?.message || String(err), color: 'red', options: true });
+            ipcRenderer.send('main-window-progress-reset');
+            if (infoStartingBOX) infoStartingBOX.style.display = "none";
+            if (playInstanceBTN) playInstanceBTN.style.display = "flex";
+            if (infoStarting) infoStarting.innerHTML = `Verificando`;
+            new logger(pkg.name, '#7289da');
+        });
+
+        if (playInstanceBTN) playInstanceBTN.style.display = "none";
+        if (infoStartingBOX) infoStartingBOX.style.display = "block";
+        if (progressBar) progressBar.style.display = "";
+        ipcRenderer.send('main-window-progress-load');
+
+        try {
+            const startImg = document.querySelector('.starting-icon-big');
+            if (startImg) {
+                const avatar = options.avatarUrl || options.avatar || options.iconUrl || options.icon || options.backgroundUrl || options.background;
+                startImg.src = avatar || 'assets/images/icon.png';
+            }
+        } catch (err) { console.warn('Failed to set starting image:', err); }
+
+        try {
+            console.log('Calling launch.Launch with opt:', opt);
+            const maybePromise = launch.Launch(opt);
+            if (maybePromise && typeof maybePromise.then === 'function') {
+                await maybePromise.catch(launchErr => { throw launchErr; });
+            }
+            console.log('launch.Launch invoked successfully');
+        } catch (launchErr) {
+            console.error('launch.Launch threw an exception:', launchErr);
+            let popupError = new popup();
+            popupError.openPopup({ title: 'Error al lanzar', content: launchErr?.message || String(launchErr), color: 'red', options: true });
+            ipcRenderer.send('main-window-progress-reset');
+            if (infoStartingBOX) infoStartingBOX.style.display = "none";
+            if (playInstanceBTN) playInstanceBTN.style.display = "flex";
+            return;
+        }
     }
 
     getdate(e) {
-        let date = new Date(e)
-        let year = date.getFullYear()
-        let month = date.getMonth() + 1
-        let day = date.getDate()
-        let allMonth = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
-        return { year: year, month: allMonth[month - 1], day: day }
+        let date = new Date(e);
+        let year = date.getFullYear();
+        let month = date.getMonth() + 1;
+        let day = date.getDate();
+        let allMonth = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        return { year, month: allMonth[month - 1], day };
     }
 }
+
 export default Home;

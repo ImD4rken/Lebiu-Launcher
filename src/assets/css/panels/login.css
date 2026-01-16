@@ -1,50 +1,180 @@
+/* Contenedor principal */
 .login .container {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
+/* Cada pestaña de login */
 .login-tabs {
-    position: absolute;
-    padding: 15px;
-    background: var(--background);
-    border-radius: 15px;
-    text-align: center;
-    min-width: 40%;
-}
-
-.login-home,
-.login-offline,
-.login-AZauth,
-.login-AZauth-A2F {
     display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 420px;
+    padding: 2.5rem;
+    background: var(--background-element); /* Gris sólido del panel lateral */
+    border: 2px solid rgba(232, 232, 232, 0.3); /* Borde rosa sutil */
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    transition: all 0.3s ease;
 }
-
+.login-tabs:hover {
+    border-color: #ffffff; /* Rosa más intenso al hacer hover */
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+/* Mostrar pestaña activa */
+.login-tabs.active {
+    display: flex;
+    animation: fadeIn 0.4s ease-out;
+}
+/* Texto principal */
 .login-text {
-    font-size: 1.3rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin-bottom: 1.5rem;
+    color: #dedede;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #d2d2d2;
+    padding-bottom: 0.5rem;
+    width: 100%;
 }
 
-.connect,
-.cancel {
-    background: none;
-    color: var(--color);
-    border: solid 4px var(--element-color);
-    border-radius: 10px;
-    padding: 0.3rem 4rem;
-    font-size: inherit;
-    font-weight: bold;
-    margin: 15px 10px;
-}
-
+/* Inputs y botones */
 .input-login .email,
 .input-login .password,
 .A2F {
-    color: var(--color);
+    width: 100%;
+    margin: 12px 0;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 2px solid rgba(196, 196, 196, 0.2);
+    background: rgba(0, 0, 0, 0.3); /* Fondo oscuro para los campos */
+    color: #ffffff;
+    font-size: 1rem;
+    transition: all 0.25s ease;
+    box-sizing: border-box;
+}
+.input-login .email:focus,
+.input-login .password:focus,
+.A2F:focus {
+    outline: none;
+    border-color: #FFFFFF; /* Rosa al enfocar */
+    background: rgba(224, 222, 223, 0.05);
+    box-shadow: 0 0 15px rgba(240, 240, 240, 0.2);
+}
+/* Contenedor de botones */
+.login-options {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+}
+
+/* Botones */
+.connect {
+    width: 100%;
+    padding: 14px;
+    margin-top: 20px;
+    border: 3px solid #FFFFFF;
+    border-radius: 12px;
     background: none;
-    border: solid 2px var(--element-color);
-    border-radius: 30px;
-    width: 50%;
-    padding: 0.4rem 1rem;
+    color: white;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 8px 20px rgba(200, 198, 199, 0.3);
+}
+
+.connect:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 25px rgba(255, 255, 255, 0.4);
+    filter: brightness(1.1);
+}
+
+/* Botón Cancelar (Gris discreto) */
+.cancel {
+    width: 100%;
+    padding: 12px;
     margin-top: 10px;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--white);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+/* ===== LOGIN SELECT ESTILO ESPECIAL ===== */
+.login-select {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-select .main-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--color);
+    margin-bottom: 0.5rem;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.login-select .divider {
+    width: 80%;
+    border: none;
+    border-top: 3px solid #ccc;
+    margin-bottom: 15px;
+}
+
+
+
+.login-select .subtitle {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 2rem;
+}
+
+.login-select .separator {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+    margin: 25px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.login-select .separator::before,
+.login-select .separator::after {
+    content: '';
+    flex: 1;
+    border-bottom: 2px solid var(--shadow);
+    margin: 0 15px;
+}
+
+.login-select .connect {
+    width: 100%;
+    text-align: center;
+}
+
+.login-select .footer {
+    margin-top: 30px;
+    font-size: 1rem;
+    color: #888;
 }

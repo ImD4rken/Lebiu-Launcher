@@ -1,6 +1,6 @@
 /**
- * @author Luuxis
- * Luuxis License v1.0 (voir fichier LICENSE pour les détails en FR/EN)
+ * @author Darken
+ * @license CC-BY-NC 4.0 - https://creativecommons.org/licenses/by-nc/4.0
  */
 
 const { ipcRenderer } = require('electron')
@@ -11,38 +11,58 @@ const pkg = require('../package.json');
 import config from './utils/config.js';
 import database from './utils/database.js';
 import logger from './utils/logger.js';
-import popup from './utils/popup.js';
+import notification from './utils/notification.js';
 import { skin2D } from './utils/skin.js';
 import slider from './utils/slider.js';
 
 async function setBackground(theme) {
-    if (typeof theme == 'undefined') {
-        let databaseLauncher = new database();
-        let configClient = await databaseLauncher.readData('configClient');
-        theme = configClient?.launcher_config?.theme || "auto"
-        theme = await ipcRenderer.invoke('is-dark-theme', theme).then(res => res)
-    }
-    let background
     let body = document.body;
     body.className = theme ? 'dark global' : 'light global';
-    if (fs.existsSync(`${__dirname}/assets/images/background/easterEgg`) && Math.random() < 0.005) {
-        let backgrounds = fs.readdirSync(`${__dirname}/assets/images/background/easterEgg`);
-        let Background = backgrounds[Math.floor(Math.random() * backgrounds.length)];
-        background = `url(./assets/images/background/easterEgg/${Background})`;
-    } else if (fs.existsSync(`${__dirname}/assets/images/background/${theme ? 'dark' : 'light'}`)) {
-        let backgrounds = fs.readdirSync(`${__dirname}/assets/images/background/${theme ? 'dark' : 'light'}`);
-        let Background = backgrounds[Math.floor(Math.random() * backgrounds.length)];
-        background = `linear-gradient(#00000080, #00000080), url(./assets/images/background/${theme ? 'dark' : 'light'}/${Background})`;
-    }
-    body.style.backgroundImage = background ? background : theme ? '#000' : '#fff';
+    let backgroundPath = './assets/images/background/dark/1.png';
+    body.style.backgroundImage = `linear-gradient(#00000000, #00000080), url(${backgroundPath})`;
     body.style.backgroundSize = 'cover';
 }
 
+
 async function changePanel(id) {
     let panel = document.querySelector(`.${id}`);
+    if (!panel) return;
     let active = document.querySelector(`.active`)
-    if (active) active.classList.toggle("active");
+    if (active) active.classList.remove("active");
+
+    if (id === 'settings' || id === 'login') {
+        await setBackground(false);
+    }
+
+    try {
+        if (id !== 'settings') {
+            const activeSettingsBTN = document.querySelector('.active-settings-BTN');
+            const activeContainerSettings = document.querySelector('.active-container-settings');
+            if (activeSettingsBTN) activeSettingsBTN.classList.remove('active-settings-BTN');
+            if (activeContainerSettings) activeContainerSettings.classList.remove('active-container-settings');
+            const cancelHome = document.querySelector('.cancel-home');
+            if (cancelHome) cancelHome.style.display = 'none';
+        }
+    } catch (err) {
+        console.error('changePanel cleanup error', err);
+    }
+
+    try {
+        const panels = document.querySelectorAll('.panel');
+        panels.forEach(p => {
+            if (p === panel) {
+                p.style.display = 'block';
+            } else {
+                p.style.display = 'none';
+                p.classList.remove('active');
+            }
+        })
+    } catch (err) {
+    }
+
     panel.classList.add("active");
+
+    ipcRenderer.send('panel-changed', { panelName: id });
 }
 
 async function appdata() {
@@ -56,13 +76,15 @@ async function addAccount(data) {
     div.classList.add("account");
     div.id = data.ID;
     div.innerHTML = `
-        <div class="profile-image" ${skin ? 'style="background-image: url(' + skin + ');"' : ''}></div>
-        <div class="profile-infos">
-            <div class="profile-pseudo">${data.name}</div>
-            <div class="profile-uuid">${data.uuid}</div>
-        </div>
-        <div class="delete-profile" id="${data.ID}">
-            <div class="icon-account-delete delete-profile-icon"></div>
+        <div class="account-card">
+            <div class="profile-image" ${skin ? 'style="background-image: url(' + skin + ');"' : ''}></div>
+            <div class="profile-infos">
+                <div class="profile-pseudo">${data.name || data.profile?.name || data.xboxAccount?.gamertag || 'Unknown'}</div>
+                <div class="profile-uuid">${data.uuid}</div>
+            </div>
+            <div class="delete-profile" id="${data.ID}">
+                <div class="icon-account-delete delete-profile-icon"></div>
+            </div>
         </div>
     `
     return document.querySelector('.accounts-list').appendChild(div);
@@ -86,11 +108,14 @@ async function setStatus(opt) {
     let nameServerElement = document.querySelector('.server-status-name')
     let statusServerElement = document.querySelector('.server-status-text')
     let playersOnline = document.querySelector('.status-player-count .player-count')
+    let statusPlayerCount = document.querySelector('.status-player-count')
+
+    if (!nameServerElement || !statusServerElement || !playersOnline || !statusPlayerCount) return
 
     if (!opt) {
         statusServerElement.classList.add('red')
         statusServerElement.innerHTML = `Ferme - 0 ms`
-        document.querySelector('.status-player-count').classList.add('red')
+        statusPlayerCount.classList.add('red')
         playersOnline.innerHTML = '0'
         return
     }
@@ -102,13 +127,13 @@ async function setStatus(opt) {
 
     if (!statusServer.error) {
         statusServerElement.classList.remove('red')
-        document.querySelector('.status-player-count').classList.remove('red')
-        statusServerElement.innerHTML = `En ligne - ${statusServer.ms ? statusServer.ms : 0} ms`
-        playersOnline.innerHTML = statusServer.playersConnect ? statusServer.playersConnect : '0'
+        statusPlayerCount.classList.remove('red')
+        statusServerElement.innerHTML = `En Linea - ${statusServer.ms} ms`
+        playersOnline.innerHTML = statusServer.playersConnect
     } else {
         statusServerElement.classList.add('red')
-        statusServerElement.innerHTML = `Ferme - 0 ms`
-        document.querySelector('.status-player-count').classList.add('red')
+        statusServerElement.innerHTML = `Farm - 0 ms`
+        statusPlayerCount.classList.add('red')
         playersOnline.innerHTML = '0'
     }
 }
@@ -120,7 +145,7 @@ export {
     config as config,
     database as database,
     logger as logger,
-    popup as popup,
+    notification as popup,
     setBackground as setBackground,
     skin2D as skin2D,
     addAccount as addAccount,

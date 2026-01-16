@@ -1,20 +1,18 @@
 {
-    "name": "Selvania-Launcher",
-    "preductname": "Selvania Launcher",
-    "version": "2.2.0",
-    "description": "Launcher Mincraft pour le serveur Selvania",
+    "name": "Lebiu-Launcher",
+    "preductname": "Lebiu Launcher",
+    "version": "1.0.0",
+    "description": "Cliente Oficial de Lebiu Studio",
     "main": "src/app.js",
     "author": {
-        "name": "luuxis, Inc.",
-        "email": "contact@luuxis.fr",
-        "url": "https://github.com/luuxis"
+        "name": "ImD4rken"
     },
-    "url": "http://luuxcraft.fr/api/user/bb8f5247-1d38-41bb-ab6d-3200471a06b2",
+    "url": "http://51.222.47.158:10023/BridgeClient",
     "scripts": {
         "start": "cross-env-shell NODE_ENV=dev electron .",
         "dev": "cross-env-shell DEV_TOOL=open nodemon --exec npm start",
         "build": "node build.js --obf=true --build=platform",
-        "icon": "node build.js --icon"
+        "icon": "node build.js --icon=https://raw.githubusercontent.com/luuxis/Selvania-Launcher/master/src/assets/images/icon.png"
     },
     "license": "CCANC",
     "nodemonConfig": {
@@ -22,23 +20,26 @@
         "ignore": "**/test"
     },
     "dependencies": {
-        "electron-store": "^8.2.0",
-        "electron-updater": "^6.6.2",
-        "minecraft-java-core": "^4.2.3",
+        "discord-rpc": "^4.0.1",
+        "discord.js": "^14.24.2",
+        "electron-updater": "^6.1.8",
+        "minecraft-java-core": "^4.1.1",
+        "node-bdd": "^2.0.4",
         "node-fetch": "^2.7.0",
+        "start": "^5.1.0",
         "xml-js": "^1.6.11"
     },
     "devDependencies": {
-        "cross-env": "^10.1.0",
-        "electron": "^39.2.7",
+        "cross-env": "^7.0.3",
+        "electron": "^30.5.1",
         "electron-builder": "^26.0.12",
-        "javascript-obfuscator": "^5.1.0",
-        "jimp": "^1.6.0",
-        "nodemon": "^3.1.11",
+        "javascript-obfuscator": "^4.1.0",
+        "jimp": "^0.22.12",
+        "nodemon": "^3.1.2",
         "png2icons": "^2.0.1"
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/luuxis/Selvania-Launcher.git"
+        "url": "git+https://github.com/ImD4rken/Lebiu-Launcher"
     }
 }

@@ -1,7 +1,3 @@
-/**
- * @author Luuxis
- * Luuxis License v1.0 (voir fichier LICENSE pour les détails en FR/EN)
- */
 const { AZauth, Mojang } = require('minecraft-java-core');
 const { ipcRenderer } = require('electron');
 
@@ -9,212 +5,216 @@ import { popup, database, changePanel, accountSelect, addAccount, config, setSta
 
 class Login {
     static id = "login";
+
     async init(config) {
         this.config = config;
         this.db = new database();
 
-        if (typeof this.config.online == 'boolean') {
-            this.config.online ? this.getMicrosoft() : this.getCrack()
-        } else if (typeof this.config.online == 'string') {
-            if (this.config.online.match(/^(http|https):\/\/[^ "]+$/)) {
-                this.getAZauth();
-            }
-        }
-        
+        this.showTab('.login-select');
+
+        document.querySelector('.select-microsoft').addEventListener('click', () => {
+            this.showMicrosoftLogin();
+        });
+
+        document.querySelector('.select-offline').addEventListener('click', () => {
+            this.showOfflineLogin();
+        });
+
         document.querySelector('.cancel-home').addEventListener('click', () => {
-            document.querySelector('.cancel-home').style.display = 'none'
-            changePanel('settings')
-        })
+            this.showTab('.login-select');
+        });
+
+        document.querySelector('.cancel-offline').addEventListener('click', () => {
+            this.showTab('.login-select');
+        });
+
+        const cancelAZauth = document.querySelector('.cancel-AZauth');
+        if(cancelAZauth){
+            cancelAZauth.addEventListener('click', () => {
+                this.showTab('.login-select');
+            });
+        }
+
+        const cancelAZauthA2F = document.querySelector('.cancel-AZauth-A2F');
+        if(cancelAZauthA2F){
+            cancelAZauthA2F.addEventListener('click', () => {
+                this.showTab('.login-select');
+            });
+        }
+    }
+
+    showTab(selector) {
+        document.querySelectorAll('.login-tabs').forEach(tab => {
+            tab.style.display = 'none';
+        });
+        const tab = document.querySelector(selector);
+        if(tab) tab.style.display = 'block';
+    }
+
+    showMicrosoftLogin() {
+        this.showTab('.login-home');
+        this.getMicrosoft();
+    }
+
+    showOfflineLogin() {
+        this.showTab('.login-offline');
+        this.getCrack();
     }
 
     async getMicrosoft() {
         console.log('Initializing Microsoft login...');
-        let popupLogin = new popup();
-        let loginHome = document.querySelector('.login-home');
-        let microsoftBtn = document.querySelector('.connect-home');
-        loginHome.style.display = 'block';
+        const popupLogin = new popup();
+        const microsoftBtn = document.querySelector('.connect-home');
 
-        microsoftBtn.addEventListener("click", () => {
-            popupLogin.openPopup({
-                title: 'Connexion',
-                content: 'Veuillez patienter...',
+        microsoftBtn.replaceWith(microsoftBtn.cloneNode(true));
+        const btn = document.querySelector('.connect-home');
+
+        btn.addEventListener("click", () => {
+            popupLogin.openNotification({
+                title: 'Conectando',
+                content: 'Espere por favor...',
                 color: 'var(--color)'
             });
 
             ipcRenderer.invoke('Microsoft-window', this.config.client_id).then(async account_connect => {
-                if (account_connect == 'cancel' || !account_connect) {
-                    popupLogin.closePopup();
+                if (!account_connect || account_connect === 'cancel') {
+                    popupLogin.closeNotification();
                     return;
-                } else {
-                    await this.saveData(account_connect)
-                    popupLogin.closePopup();
                 }
-
+                console.log('[Login] Microsoft account_connect data:', account_connect);
+                await this.saveData(account_connect);
+                popupLogin.closeNotification();
             }).catch(err => {
-                popupLogin.openPopup({
-                    title: 'Erreur',
+                popupLogin.openNotification({
+                    title: 'Error',
                     content: err,
                     options: true
                 });
             });
-        })
+        });
     }
 
     async getCrack() {
         console.log('Initializing offline login...');
-        let popupLogin = new popup();
-        let loginOffline = document.querySelector('.login-offline');
+        const popupLogin = new popup();
+        const emailOffline = document.querySelector('.email-offline');
+        const connectOffline = document.querySelector('.connect-offline');
 
-        let emailOffline = document.querySelector('.email-offline');
-        let connectOffline = document.querySelector('.connect-offline');
-        loginOffline.style.display = 'block';
+        connectOffline.replaceWith(connectOffline.cloneNode(true));
+        const btn = document.querySelector('.connect-offline');
 
-        connectOffline.addEventListener('click', async () => {
-            if (emailOffline.value.length < 3) {
-                popupLogin.openPopup({
-                    title: 'Erreur',
-                    content: 'Votre pseudo doit faire au moins 3 caractères.',
+        btn.addEventListener('click', async () => {
+            const nick = emailOffline.value.trim();
+            if (nick.length < 3) {
+                popupLogin.openNotification({
+                    title: 'Error',
+                    content: 'Tu Nick debe tener al menos 3 caracteres.',
+                    options: true
+                });
+                return;
+            }
+            if (nick.includes(' ')) {
+                popupLogin.openNotification({
+                    title: 'Error',
+                    content: 'Tu Nick no debe contener espacios.',
                     options: true
                 });
                 return;
             }
 
-            if (emailOffline.value.match(/ /g)) {
-                popupLogin.openPopup({
-                    title: 'Erreur',
-                    content: 'Votre pseudo ne doit pas contenir d\'espaces.',
-                    options: true
-                });
-                return;
-            }
-
-            let MojangConnect = await Mojang.login(emailOffline.value);
-
+            const MojangConnect = await Mojang.login(nick);
             if (MojangConnect.error) {
-                popupLogin.openPopup({
-                    title: 'Erreur',
+                popupLogin.openNotification({
+                    title: 'Error',
                     content: MojangConnect.message,
                     options: true
                 });
                 return;
             }
-            await this.saveData(MojangConnect)
-            popupLogin.closePopup();
+            await this.saveData(MojangConnect);
+            popupLogin.closeNotification();
         });
     }
 
     async getAZauth() {
-        console.log('Initializing AZauth login...');
-        let AZauthClient = new AZauth(this.config.online);
-        let PopupLogin = new popup();
-        let loginAZauth = document.querySelector('.login-AZauth');
-        let loginAZauthA2F = document.querySelector('.login-AZauth-A2F');
-
-        let AZauthEmail = document.querySelector('.email-AZauth');
-        let AZauthPassword = document.querySelector('.password-AZauth');
-        let AZauthA2F = document.querySelector('.A2F-AZauth');
-        let connectAZauthA2F = document.querySelector('.connect-AZauth-A2F');
-        let AZauthConnectBTN = document.querySelector('.connect-AZauth');
-        let AZauthCancelA2F = document.querySelector('.cancel-AZauth-A2F');
-
-        loginAZauth.style.display = 'block';
-
-        AZauthConnectBTN.addEventListener('click', async () => {
-            PopupLogin.openPopup({
-                title: 'Connexion en cours...',
-                content: 'Veuillez patienter...',
-                color: 'var(--color)'
-            });
-
-            if (AZauthEmail.value == '' || AZauthPassword.value == '') {
-                PopupLogin.openPopup({
-                    title: 'Erreur',
-                    content: 'Veuillez remplir tous les champs.',
-                    options: true
-                });
-                return;
-            }
-
-            let AZauthConnect = await AZauthClient.login(AZauthEmail.value, AZauthPassword.value);
-
-            if (AZauthConnect.error) {
-                PopupLogin.openPopup({
-                    title: 'Erreur',
-                    content: AZauthConnect.message,
-                    options: true
-                });
-                return;
-            } else if (AZauthConnect.A2F) {
-                loginAZauthA2F.style.display = 'block';
-                loginAZauth.style.display = 'none';
-                PopupLogin.closePopup();
-
-                AZauthCancelA2F.addEventListener('click', () => {
-                    loginAZauthA2F.style.display = 'none';
-                    loginAZauth.style.display = 'block';
-                });
-
-                connectAZauthA2F.addEventListener('click', async () => {
-                    PopupLogin.openPopup({
-                        title: 'Connexion en cours...',
-                        content: 'Veuillez patienter...',
-                        color: 'var(--color)'
-                    });
-
-                    if (AZauthA2F.value == '') {
-                        PopupLogin.openPopup({
-                            title: 'Erreur',
-                            content: 'Veuillez entrer le code A2F.',
-                            options: true
-                        });
-                        return;
-                    }
-
-                    AZauthConnect = await AZauthClient.login(AZauthEmail.value, AZauthPassword.value, AZauthA2F.value);
-
-                    if (AZauthConnect.error) {
-                        PopupLogin.openPopup({
-                            title: 'Erreur',
-                            content: AZauthConnect.message,
-                            options: true
-                        });
-                        return;
-                    }
-
-                    await this.saveData(AZauthConnect)
-                    PopupLogin.closePopup();
-                });
-            } else if (!AZauthConnect.A2F) {
-                await this.saveData(AZauthConnect)
-                PopupLogin.closePopup();
-            }
-        });
     }
 
     async saveData(connectionData) {
-        let configClient = await this.db.readData('configClient');
-        let account = await this.db.createData('accounts', connectionData)
-        let instanceSelect = configClient.instance_select
-        let instancesList = await config.getInstanceList()
+        console.log('[Login] saveData called with:', connectionData);
+        
+        const normalizedName = connectionData.name || connectionData.profile?.name || connectionData.username || connectionData.xboxAccount?.gamertag;
+        if (!connectionData.name && normalizedName) {
+            connectionData.name = normalizedName;
+            console.log(`[Login] Microsoft account normalized: name=${connectionData.name}`);
+        }
+        if (!connectionData.name) {
+            console.warn('[Login] Account has no name property before saveData!', connectionData);
+            connectionData.name = normalizedName || 'Unknown';
+            console.log(`[Login] Assigned fallback name: ${connectionData.name}`);
+        }
+
+        const configClient = await this.db.readData('configClient');
+        const account = await this.db.createData('accounts', connectionData);
+        
+        console.log('[Login] Account after createData:', account);
+        
+        const normalizedAccountName = account.name || account.profile?.name || account.username || account.xboxAccount?.gamertag;
+        if (!account.name && normalizedAccountName) {
+            account.name = normalizedAccountName;
+            console.log(`[Login] Account name needed re-normalization after createData: ${account.name}`);
+            await this.db.updateData('accounts', account, account.ID);
+        }
+        
+        if (!account.name) {
+            console.error('[Login] CRITICAL: Account still has no name after normalization!', account);
+            account.name = normalizedAccountName || 'Unknown';
+            console.log(`[Login] Final fallback name assigned: ${account.name}`);
+            await this.db.updateData('accounts', account, account.ID);
+        }
+        const instanceSelect = configClient.instance_selct;
+        const instancesList = await config.getInstanceList();
+
         configClient.account_selected = account.ID;
 
-        for (let instance of instancesList) {
-            if (instance.whitelistActive) {
-                let whitelist = instance.whitelist.find(whitelist => whitelist == account.name)
-                if (whitelist !== account.name) {
-                    if (instance.name == instanceSelect) {
-                        let newInstanceSelect = instancesList.find(i => i.whitelistActive == false)
-                        configClient.instance_select = newInstanceSelect.name
-                        await setStatus(newInstanceSelect.status)
+        try {
+            for (let instance of instancesList) {
+                if (instance.whitelistActive) {
+                    const whitelist = instance.whitelist.find(u => u === account.name);
+                    if (whitelist !== account.name && instance.name === instanceSelect) {
+                        const newInstanceSelect = instancesList.find(i => !i.whitelistActive);
+                        if (newInstanceSelect) {
+                            configClient.instance_selct = newInstanceSelect.name;
+                            await setStatus(newInstanceSelect.status);
+                        }
                     }
                 }
             }
+        } catch (err) {
+            console.warn('Error while adjusting instance selection for new account:', err);
         }
 
         await this.db.updateData('configClient', configClient);
-        await addAccount(account);
-        await accountSelect(account);
-        changePanel('home');
+
+        try {
+            await addAccount(account);
+        } catch (err) {
+            console.warn('addAccount failed (UI list update) but account was created:', err);
+        }
+
+        try {
+            await accountSelect(account);
+        } catch (err) {
+            console.warn('accountSelect failed (UI selection) but account was created:', err);
+        }
+
+        try {
+            changePanel('home');
+        } catch (err) {
+            console.error('changePanel to home failed after login:', err);
+        }
+
+        return account;
     }
 }
+
 export default Login;

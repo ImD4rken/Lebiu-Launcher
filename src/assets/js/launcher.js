@@ -1,17 +1,14 @@
 /**
- * @author Luuxis
- * Luuxis License v1.0 (voir fichier LICENSE pour les détails en FR/EN)
+ * @author Darken
+ * @license CC-BY-NC 4.0 - https://creativecommons.org/licenses/by-nc/4.0
  */
-// import panel
 import Login from './panels/login.js';
 import Home from './panels/home.js';
 import Settings from './panels/settings.js';
 
-// import modules
 import { logger, config, changePanel, database, popup, setBackground, accountSelect, addAccount, pkg } from './utils.js';
 const { AZauth, Microsoft, Mojang } = require('minecraft-java-core');
 
-// libs
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const os = require('os');
@@ -51,7 +48,7 @@ class Launcher {
 
 
     errorConnect() {
-        new popup().openPopup({
+        new popup().openNotification({
             title: this.config.error.code,
             content: this.config.error.message,
             color: 'red',
@@ -70,15 +67,10 @@ class Launcher {
             ipcRenderer.send('main-window-minimize');
         });
 
-        let maximized = false;
         let maximize = document.querySelector(`.${platform} .frame #maximize`);
-        maximize.addEventListener('click', () => {
-            if (maximized) ipcRenderer.send('main-window-maximize')
-            else ipcRenderer.send('main-window-maximize');
-            maximized = !maximized
-            maximize.classList.toggle('icon-maximize')
-            maximize.classList.toggle('icon-restore-down')
-        });
+        if (maximize) {
+            maximize.style.display = 'none';
+        }
 
         document.querySelector(`.${platform} .frame #close`).addEventListener('click', () => {
             ipcRenderer.send('main-window-close');
@@ -92,7 +84,7 @@ class Launcher {
         if (!configClient) {
             await this.db.createData('configClient', {
                 account_selected: null,
-                instance_select: null,
+                instance_selct: null,
                 java_config: {
                     java_path: null,
                     java_memory: {
@@ -143,9 +135,9 @@ class Launcher {
                 }
                 if (account.meta.type === 'Xbox') {
                     console.log(`Account Type: ${account.meta.type} | Username: ${account.name}`);
-                    popupRefresh.openPopup({
-                        title: 'Connexion',
-                        content: `Refresh account Type: ${account.meta.type} | Username: ${account.name}`,
+                    popupRefresh.openNotification({
+                        title: 'Conectando...',
+                        content: `Actualizando cuenta Type: ${account.meta.type} | Usuario: ${account.name}`,
                         color: 'var(--color)',
                         background: false
                     });
@@ -162,48 +154,83 @@ class Launcher {
                         continue;
                     }
 
+                    const normalizedMicrosoftName = refresh_accounts.name || refresh_accounts.profile?.name || refresh_accounts.username || refresh_accounts.xboxAccount?.gamertag;
+                    if (!refresh_accounts.name && normalizedMicrosoftName) {
+                        refresh_accounts.name = normalizedMicrosoftName;
+                        console.log(`[Launcher] Microsoft account refreshed and normalized: name=${refresh_accounts.name}`);
+                    }
+                    
+                    if (!refresh_accounts.name) {
+                        console.error(`[Account] ${account.name}: Refreshed account missing name property`, refresh_accounts);
+                        await this.db.deleteData('accounts', account_ID)
+                        if (account_ID == account_selected) {
+                            configClient.account_selected = null
+                            await this.db.updateData('configClient', configClient)
+                        }
+                        continue;
+                    }
+
                     refresh_accounts.ID = account_ID
                     await this.db.updateData('accounts', refresh_accounts, account_ID)
                     await addAccount(refresh_accounts)
                     if (account_ID == account_selected) accountSelect(refresh_accounts)
                 } else if (account.meta.type == 'AZauth') {
                     console.log(`Account Type: ${account.meta.type} | Username: ${account.name}`);
-                    popupRefresh.openPopup({
-                        title: 'Connexion',
-                        content: `Refresh account Type: ${account.meta.type} | Username: ${account.name}`,
+                    popupRefresh.openNotification({
+                        title: 'Conectando',
+                        content: `Actualizando cuenta Type: ${account.meta.type} | Usuario: ${account.name}`,
                         color: 'var(--color)',
                         background: false
                     });
                     let refresh_accounts = await new AZauth(this.config.online).verify(account);
 
                     if (refresh_accounts.error) {
-                        this.db.deleteData('accounts', account_ID)
+                        await this.db.deleteData('accounts', account_ID)
                         if (account_ID == account_selected) {
                             configClient.account_selected = null
-                            this.db.updateData('configClient', configClient)
+                            await this.db.updateData('configClient', configClient)
                         }
                         console.error(`[Account] ${account.name}: ${refresh_accounts.message}`);
                         continue;
                     }
 
+                    if (!refresh_accounts.name && refresh_accounts.profile?.name) {
+                        refresh_accounts.name = refresh_accounts.profile.name;
+                        console.log(`[Launcher] AZauth account refreshed and normalized: name=${refresh_accounts.name}`);
+                    }
+                    
+                    if (!refresh_accounts.name) {
+                        console.error(`[Account] ${account.name}: Refreshed account missing name property`, refresh_accounts);
+                        await this.db.deleteData('accounts', account_ID)
+                        if (account_ID == account_selected) {
+                            configClient.account_selected = null
+                            await this.db.updateData('configClient', configClient)
+                        }
+                        continue;
+                    }
+
                     refresh_accounts.ID = account_ID
-                    this.db.updateData('accounts', refresh_accounts, account_ID)
+                    await this.db.updateData('accounts', refresh_accounts, account_ID)
                     await addAccount(refresh_accounts)
                     if (account_ID == account_selected) accountSelect(refresh_accounts)
                 } else if (account.meta.type == 'Mojang') {
                     console.log(`Account Type: ${account.meta.type} | Username: ${account.name}`);
-                    popupRefresh.openPopup({
-                        title: 'Connexion',
-                        content: `Refresh account Type: ${account.meta.type} | Username: ${account.name}`,
+                    popupRefresh.openNotification({
+                        title: 'Conexión',
+                        content: `Actualizando cuenta Type: ${account.meta.type} | Usuario: ${account.name}`,
                         color: 'var(--color)',
                         background: false
                     });
                     if (account.meta.online == false) {
                         let refresh_accounts = await Mojang.login(account.name);
+                        
+                        if (!refresh_accounts.name && refresh_accounts.profile?.name) {
+                            refresh_accounts.name = refresh_accounts.profile.name;
+                        }
 
                         refresh_accounts.ID = account_ID
                         await addAccount(refresh_accounts)
-                        this.db.updateData('accounts', refresh_accounts, account_ID)
+                        await this.db.updateData('accounts', refresh_accounts, account_ID)
                         if (account_ID == account_selected) accountSelect(refresh_accounts)
                         continue;
                     }
@@ -211,17 +238,32 @@ class Launcher {
                     let refresh_accounts = await Mojang.refresh(account);
 
                     if (refresh_accounts.error) {
-                        this.db.deleteData('accounts', account_ID)
+                        await this.db.deleteData('accounts', account_ID)
                         if (account_ID == account_selected) {
                             configClient.account_selected = null
-                            this.db.updateData('configClient', configClient)
+                            await this.db.updateData('configClient', configClient)
                         }
                         console.error(`[Account] ${account.name}: ${refresh_accounts.errorMessage}`);
                         continue;
                     }
 
+                    if (!refresh_accounts.name && refresh_accounts.profile?.name) {
+                        refresh_accounts.name = refresh_accounts.profile.name;
+                        console.log(`[Launcher] Mojang account refreshed and normalized: name=${refresh_accounts.name}`);
+                    }
+                    
+                    if (!refresh_accounts.name) {
+                        console.error(`[Account] ${account.name}: Refreshed account missing name property`, refresh_accounts);
+                        await this.db.deleteData('accounts', account_ID)
+                        if (account_ID == account_selected) {
+                            configClient.account_selected = null
+                            await this.db.updateData('configClient', configClient)
+                        }
+                        continue;
+                    }
+
                     refresh_accounts.ID = account_ID
-                    this.db.updateData('accounts', refresh_accounts, account_ID)
+                    await this.db.updateData('accounts', refresh_accounts, account_ID)
                     await addAccount(refresh_accounts)
                     if (account_ID == account_selected) accountSelect(refresh_accounts)
                 } else {
@@ -250,14 +292,14 @@ class Launcher {
             if (!accounts.length) {
                 config.account_selected = null
                 await this.db.updateData('configClient', config);
-                popupRefresh.closePopup()
+                popupRefresh.closeNotification()
                 return changePanel("login");
             }
 
-            popupRefresh.closePopup()
+            popupRefresh.closeNotification()
             changePanel("home");
         } else {
-            popupRefresh.closePopup()
+            popupRefresh.closeNotification()
             changePanel('login');
         }
     }
