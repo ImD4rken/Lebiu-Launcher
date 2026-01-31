@@ -691,23 +691,13 @@ class Home {
 
     async instancesSelect() {
 
-        let configClient = await this.db.readData('configClient');
+        let configClient = await this.db.readData('configClient') || {};
+
+        configClient.instance_selct = null;
+
+        await this.db.updateData('configClient', configClient);
 
         let auth = await this.db.readData('accounts', configClient.account_selected);
-
-        let allInstances = await config.getInstanceList();
-
-        let instancesList = await this.filterAuthorizedInstances(allInstances, auth?.name);
-
-       
-
-        let instanceSelect = instancesList.find(i => i.name == configClient?.instance_selct)
-
-            ? configClient?.instance_selct
-
-            : null;
-
-
 
         let playBTN = document.querySelector('.play-btn');
 
@@ -719,56 +709,75 @@ class Home {
 
         const notificationInstance = new popup();
 
+        const updateInstanceSelection = async (preferredInstance = null) => {
 
+            configClient = await this.db.readData('configClient');
 
-        instanceBTN.style.display = 'flex';
+            auth = await this.db.readData('accounts', configClient.account_selected);
 
+            const allInstances = await config.getInstanceList();
 
+            const instancesList = await this.filterAuthorizedInstances(allInstances, auth?.name);
 
-        if (!instanceSelect && instancesList.length > 0) {
+            let instanceSelect = preferredInstance || configClient?.instance_selct || null;
 
-            configClient.instance_selct = instancesList[0]?.name;
+            if (instanceSelect && !instancesList.find(i => i.name === instanceSelect)) instanceSelect = null;
 
-            instanceSelect = instancesList[0]?.name;
+            if (configClient.instance_selct !== instanceSelect) {
 
-            await this.db.updateData('configClient', configClient);
+                configClient.instance_selct = instanceSelect;
 
-        }
-
-
-
-        for (let instance of instancesList) {
-
-            if (instance.name === instanceSelect) {
-
-                setStatus(instance.status);
-
-                break;
+                await this.db.updateData('configClient', configClient);
 
             }
 
-        }
+            await this.renderSidebarAvatars();
 
+            if (playBTN) {
 
+                if (instanceSelect) playBTN.removeAttribute('disabled');
 
-        if (instanceSelect) await this.updateInstanceDisplay(instanceSelect);
+                else playBTN.setAttribute('disabled', 'true');
 
-const currentInstanceData = instancesList.find(i => i.name === instanceSelect);
-    if (currentInstanceData) {
-        const initialAvatar = currentInstanceData.avatarUrl || currentInstanceData.iconUrl || currentInstanceData.icon || 'assets/images/icon.png';
-        ipcRenderer.send('instance-changed', { 
-            instanceName: instanceSelect,
-            avatarURL: initialAvatar
-        });
-    }
+            }
 
-        try {
+            if (instanceSelect) await this.updateInstanceDisplay(instanceSelect);
 
-            let currentOption = instancesList.find(i => i.name === instanceSelect);
+            const currentInstanceData = instancesList.find(i => i.name === instanceSelect);
 
-            if (currentOption) this.setBackground(currentOption.backgroundUrl || currentOption.background || null);
+            if (currentInstanceData) {
 
-        } catch (e) { console.warn('Error aplicando fondo inicial:', e); }
+                const initialAvatar = currentInstanceData.avatarUrl || currentInstanceData.iconUrl || currentInstanceData.icon || 'assets/images/icon.png';
+
+                ipcRenderer.send('instance-changed', {
+
+                    instanceName: instanceSelect,
+
+                    avatarURL: initialAvatar
+
+                });
+
+                const bg = currentInstanceData.backgroundUrl || currentInstanceData.background || null;
+
+                if (bg) this.setBackground(bg);
+
+                else this.setBackground(null);
+
+                try { setStatus(currentInstanceData.status); } catch (e) { }
+
+            } else {
+
+                this.setBackground(null);
+
+            }
+
+            return { instancesList, instanceSelect };
+
+        };
+
+        await updateInstanceSelection();
+
+        instanceBTN.style.display = 'flex';
 
 
 
@@ -976,11 +985,7 @@ const currentInstanceData = instancesList.find(i => i.name === instanceSelect);
 
                            
 
-                            setTimeout(async () => {
-
-                                await updateInstanceSelection();
-
-                            }, 500);
+                            await updateInstanceSelection(instanceName);
 
                         } catch (e) {
 
@@ -1012,11 +1017,7 @@ const currentInstanceData = instancesList.find(i => i.name === instanceSelect);
 
                         });
 
-                        setTimeout(() => {
-
-                            updateInstanceSelection();
-
-                        }, 100);
+                        await updateInstanceSelection(data.instanceName || data.instance);
 
                     } else {
 

@@ -21,7 +21,8 @@ const rpc = new RPC.Client({ transport: 'ipc' });
 let currentInstance = 'Sin seleccionar';
 let currentPanel = 'home';
 
-// ... (resto del código anterior)
+const DEFAULT_SMALL_IMAGE = 'launcher_logo';
+const DEFAULT_LARGE_IMAGE = 'icon';
 
 // Actualizamos setActivity para recibir la imagen
 async function setActivity(instanceName = currentInstance, panelName = currentPanel, avatarURL = null) {
@@ -34,13 +35,11 @@ async function setActivity(instanceName = currentInstance, panelName = currentPa
         details = 'En el login';
     }
 
-    // Si hay avatarURL, la usamos como imagen pequeña o grande según prefieras.
-    // Usaremos avatarURL para smallImageKey si existe, de lo contrario el 'icon' por defecto.
     rpc.setActivity({
         startTimestamp: new Date(),
-        smallImageKey: 'launcher_logo',
+        smallImageKey: DEFAULT_SMALL_IMAGE,
         largeImageText: 'Lebiu Launcher',
-        largeImageKey: avatarURL ? avatarURL : 'icon', // Aquí se aplica el cambio
+        largeImageKey: avatarURL ? avatarURL : DEFAULT_LARGE_IMAGE,
         smallImageText: `Instancia: ${instanceName}`,
         details: details,
         state: `Jugando: ${instanceName}`,
